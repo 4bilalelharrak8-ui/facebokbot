@@ -38,9 +38,7 @@ app.post('/webhook', async (req, res) => {
     const body = req.body;
 
     if (body.object === 'page') {
-        // نرسل الرد لفيسبوك فوراً
-        res.status(200).send('EVENT_RECEIVED');
-
+              // 1. نقوم بمعالجة الرسالة وإرسال الرد أولاً
         for (const entry of body.entry) {
             const webhook_event = entry.messaging[0];
             const sender_psid = webhook_event.sender.id;
@@ -48,11 +46,14 @@ app.post('/webhook', async (req, res) => {
             if (webhook_event.message && webhook_event.message.text) {
                 const messageText = webhook_event.message.text;
                 console.log(`📩 Received: ${messageText}`);
-
-                // المعالجة في الخلفية بدون انتظار
-                processMessage(sender_psid, messageText);
+                
+                // ننتظر حتى يتم الإرسال
+                await processMessage(sender_psid, messageText);
             }
         }
+
+        // 2. بعد الانتهاء، نخبر فيسبوك أننا استلمنا الرسالة
+        res.status(200).send('EVENT_RECEIVED');
     } else {
         res.sendStatus(404);
     }
