@@ -11,10 +11,13 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 app.use(bodyParser.json());
+
+// 1. صفحة الترحيب
 app.get('/', (req, res) => {
-  res.send('السيرفر يعمل بنجاح - جاهز للربط');
+  res.send('Bot is running on Vercel!');
 });
-// 1. Webhook Verification
+
+// 2. Webhook Verification
 app.get('/webhook', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
@@ -30,11 +33,14 @@ app.get('/webhook', (req, res) => {
     }
 });
 
-// 2. Receive Messages
+// 3. Receive Messages
 app.post('/webhook', async (req, res) => {
     const body = req.body;
 
     if (body.object === 'page') {
+        // نرسل الرد لفيسبوك فوراً حتى لا ينتظر كثيراً (حل مشكلة الـ Timeout)
+        res.status(200).send('EVENT_RECEIVED');
+
         for (const entry of body.entry) {
             const webhook_event = entry.messaging[0];
             const sender_psid = webhook_event.sender.id;
@@ -43,37 +49,41 @@ app.post('/webhook', async (req, res) => {
                 const messageText = webhook_event.message.text;
                 console.log(`📩 Received: ${messageText}`);
 
-                await sendTypingAction(sender_psid);
-                const aiResponse = await getAIResponse(messageText);
-                await sendMessage(sender_psid, aiResponse);
+                // نستدعي الرد في الخلفية
+                processMessage(sender_psid, messageText);
             }
         }
-        res.status(200).send('EVENT_RECEIVED');
     } else {
         res.sendStatus(404);
     }
 });
 
-// 3. AI Function (تم تغيير الموديل هنا إلى gemini-2.5-flash)
-async function getAIResponse(text) {
-    // الرابط الجديد والموديل الصحيح من القائمة التي ظهرت لك
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
+// دالة معالجة الرسالة وإرسال الرد
+async function processMessage(sender_psid, text) {
     try {
-        const response = await axios.post(url, {
-            contents: [{
-                parts: [{ text: text }]
-            }]
-        });
-
-        return response.data.candidates[0].content.parts[0].text;
+        await sendTypingAction(sender_psid);
+        const aiResponse = await getAIResponse(text);
+        await sendMessage(sender_psid, aiResponse);
     } catch (error) {
-        console.error("Gemini Error:", error.response ? error.response.data.error.message : error.message);
-        return "عذراً، حدث خطأ في الاتصال.";
+        console.error("Error processing message:", error);
     }
 }
 
-// 4. Send Message
+// Gemini AI Function
+async function getAIResponse(text) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    try {
+        const response = await axios.post(url, {
+            contents: [{ parts: [{ text: text }] }]
+        });
+        return response.data.candidates[0].content.parts[0].text;
+    } catch (error) {
+        console.error("AI Error");
+        return "حدث خطأ.";
+    }
+}
+
+// Send Message
 async function sendMessage(sender_psid, text) {
     try {
         await axios.post(`https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
@@ -84,7 +94,7 @@ async function sendMessage(sender_psid, text) {
     } catch (e) { console.error("Send Error"); }
 }
 
-// 5. Typing Action
+// Typing Action
 async function sendTypingAction(sender_psid) {
     await axios.post(`https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
         recipient: { id: sender_psid },
@@ -92,5 +102,5 @@ async function sendTypingAction(sender_psid) {
     });
 }
 
-// هذا الكود خاص بـ Vercel لجعل البوت يعمل
+// 🟢 هذا السطر ضروري جداً لعمل Vercel
 module.exports = app;
