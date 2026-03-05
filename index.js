@@ -92,6 +92,5 @@ async function sendTypingAction(sender_psid) {
     });
 }
 
-app.listen(PORT, () => {
-    console.log(`🚀 Server is running on port ${PORT}`);
-});
+// هذا الكود خاص بـ Vercel لجعل البوت يعمل
+module.exports = app;
