@@ -38,7 +38,7 @@ app.post('/webhook', async (req, res) => {
     const body = req.body;
 
     if (body.object === 'page') {
-        // نرسل الرد لفيسبوك فوراً حتى لا ينتظر كثيراً (حل مشكلة الـ Timeout)
+        // نرسل الرد لفيسبوك فوراً
         res.status(200).send('EVENT_RECEIVED');
 
         for (const entry of body.entry) {
@@ -49,7 +49,7 @@ app.post('/webhook', async (req, res) => {
                 const messageText = webhook_event.message.text;
                 console.log(`📩 Received: ${messageText}`);
 
-                // نستدعي الرد في الخلفية
+                // المعالجة في الخلفية بدون انتظار
                 processMessage(sender_psid, messageText);
             }
         }
@@ -58,10 +58,47 @@ app.post('/webhook', async (req, res) => {
     }
 });
 
-// دالة معالجة الرسالة وإرسال الرد
+// دالة معالجة الرسالة
 async function processMessage(sender_psid, text) {
     try {
-        await sendTypingAction(sender_psid);
+        // طلب الرد من الذكاء الاصطناعي
+        const aiResponse = await getAIResponse(text);
+        // إرسال الرد للمستخدم
+        await sendMessage(sender_psid, aiResponse);
+    } catch (error) {
+        console.error("Error in process message:", error);
+    }
+}
+
+// Gemini AI Function
+async function getAIResponse(text) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    try {
+        const response = await axios.post(url, {
+            contents: [{ parts: [{ text: text }] }]
+        });
+        return response.data.candidates[0].content.parts[0].text;
+    } catch (error) {
+        console.error("AI Error");
+        return "حدث خطأ في الاتصال بالذكاء الاصطناعي.";
+    }
+}
+
+// Send Message
+async function sendMessage(sender_psid, text) {
+    try {
+        await axios.post(`https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
+            recipient: { id: sender_psid },
+            message: { text: text }
+        });
+        console.log("✅ Message Sent");
+    } catch (e) { 
+        console.error("Send Error"); 
+    }
+}
+
+// مطلوب لعمل Vercel
+module.exports = app;        await sendTypingAction(sender_psid);
         const aiResponse = await getAIResponse(text);
         await sendMessage(sender_psid, aiResponse);
     } catch (error) {
